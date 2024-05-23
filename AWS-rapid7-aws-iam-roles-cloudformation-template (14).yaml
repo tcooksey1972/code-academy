@@ -1,0 +1,1309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Create an IAM Role for Rapid7 connectivity and creates/attaches IAM
+  Policies -- that encapsulate discrete Rapid7 features -- which are configurable
+  within this deployment template. NOTE: This file is auto generated and should not
+  be directly modified. Download updated versions of the CFT from the Rapid7 in-product
+  experience.'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Trust & Authentication
+      Parameters:
+      - IamDeploymentRoleArn
+      - IamRoleExternalId
+      - AllowEventbridgeToAssumeEgressRole
+    - Label:
+        default: Feature Enablement
+      Parameters:
+      - EnableHostVulnerabilityManagement
+      - EnableContainerVulnerabilityManagement
+      - EnableEventbridgeAutoProvisioning
+      - EnableLpaAutoProvisioning
+    - Label:
+        default: Data Access
+      Parameters:
+      - LpaWorkingBucket
+    - Label:
+        default: Automation & Remediation
+      Parameters:
+      - EnableAutomationFullAccessPolicy
+      - IamAutomationPolicyName
+    ParameterLabels:
+      IamDeploymentRoleArn:
+        default: Authenticating IAM Principal
+      IamRoleExternalId:
+        default: AssumeRole ExternalId
+      AllowEventbridgeToAssumeEgressRole:
+        default: Allow EventBridge to assume Rapid7 IAM Role for Event Driven Harvesting
+          (EDH)
+      EnableHostVulnerabilityManagement:
+        default: Enable Host Vulnerability Management
+      EnableContainerVulnerabilityManagement:
+        default: Enable Container Vulnerability Management
+      EnableEventbridgeAutoProvisioning:
+        default: Enable EventBridge Auto-Provisioning for Event Driven Harvesting
+          (EDH)
+      EnableLpaAutoProvisioning:
+        default: Enable IAM Least Privileged Access (LPA)
+      LpaWorkingBucket:
+        default: S3 Bucket for LPA Results
+      EnableAutomationFullAccessPolicy:
+        default: Enable default Automation Policy (Full Service Access)
+      IamAutomationPolicyName:
+        default: Optional Automation Policy Name
+Parameters:
+  IamDeploymentRoleArn:
+    Type: String
+    Description: For Private Cloud or Self Hosted deployments, set this variable to
+      the IAM Role ARN of InsightCloudSec Deployment. For AWS GovCloud or China, set
+      this variable to the IAM User ARN used to authenticate.
+  IamRoleExternalId:
+    Type: String
+    Description: An External ID is generated for your specific InsightCloudSec organization
+      and will be presented to you during the onboarding process.
+    MinLength: 0
+    MaxLength: 96
+  AllowEventbridgeToAssumeEgressRole:
+    Type: String
+    Description: Appends an IAM statement to the Rapid7 IAM Role's AssumeRolePolicyDocument
+      allowing the EventBridge service to assume the Rapid7 role to publish events
+      to target event buses. This avoids needing a dedicated IAM Role for Event Driven
+      Harvesting (EDH) in each producer Account.
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  EnableHostVulnerabilityManagement:
+    Type: String
+    Description: Host Vulnerability Management (HVM) enables Security and DevOps teams
+      to efficiently view, prioritize, and orchestrate the response to vulnerabilities
+      (Common Vulnerabilities and Exposures (CVEs)) detected on host instances across
+      their clouds accounts. Host are automatically assessed when they are launched
+      and detected by the InsightCloudSec harvesters without the use of traditional
+      network scanning or an embedded agent. The snapshots are downloaded to your
+      InsightCloudSec instance, their software inventory is assessed and stored, and
+      are then promptly deleted. The host instance inventory is continuously monitored
+      for new vulnerabilities as long as they remain active in your cloud. Select
+      changes to the host instance in the cloud will automatically trigger a fresh
+      snapshot and assessment.
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  EnableContainerVulnerabilityManagement:
+    Type: String
+    Description: 'The Container Vulnerability Management (CVM) service is designed
+      to continuously assess all container images specified in production workloads
+      to detect installed software with known vulnerabilities. Container image IDs
+      are harvested from your configured cloud accounts and a copy is pulled from
+      the source registry. '
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  EnableEventbridgeAutoProvisioning:
+    Type: String
+    Description: Grants the Rapid7 IAM Role permission to create/manage EventBridge
+      Rules/Targets and create/manage an SQS queue for consuming the Events.
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  EnableLpaAutoProvisioning:
+    Type: String
+    Description: Grants the Rapid7 IAM Role permission to access CloudTrail, to create
+      the necessary AWS Glue tables and to create/execute Athena queries with a s3
+      bucket for results.
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  LpaWorkingBucket:
+    Type: String
+    Description: If LPA feature is enabled, this s3 bucket is used for storing the
+      results of the Athena query.
+  EnableAutomationFullAccessPolicy:
+    Type: String
+    Description: IAM Policy that provides full, wildcard permissions, e.g., health:*,
+      for each service InsightCloudSec supports. It allows for use of all automation
+      and remediation features without tailored IAM Policy design. It is useful for
+      proof of concept deployments and testing of features.
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'No'
+  IamAutomationPolicyName:
+    Type: String
+    Description: 'Name of IAM Policy that grant permissions to make direct changes
+      to cloud infrastructure and/or to trigger automation/notifications via AWS services
+      like Lambda, SNS, SQS, EventBridge, etc. The name is dynamically formatted in
+      the template into an ARN with the correct Partition and Account. IMPORTANT:
+      An IAM Policy with that name MUST exist within each Account the Stack is deployed
+      to. Otherwise the deployment will fail.'
+Conditions:
+  CondAllowEventbridgeToAssumeEgressRole:
+    Fn::Equals:
+    - Ref: AllowEventbridgeToAssumeEgressRole
+    - 'Yes'
+  CondEnableEventbridgeAutoProvisioning:
+    Fn::Equals:
+    - Ref: EnableEventbridgeAutoProvisioning
+    - 'Yes'
+  CondEnableLpaAutoProvisioning:
+    Fn::Equals:
+    - Ref: EnableLpaAutoProvisioning
+    - 'Yes'
+  CondEnableHostVulnerabilityManagement:
+    Fn::Equals:
+    - Ref: EnableHostVulnerabilityManagement
+    - 'Yes'
+  CondEnableContainerVulnerabilityManagement:
+    Fn::Equals:
+    - Ref: EnableContainerVulnerabilityManagement
+    - 'Yes'
+  CondEnableAutomationFullAccessPolicy:
+    Fn::Equals:
+    - Ref: EnableAutomationFullAccessPolicy
+    - 'Yes'
+  CondIamAutomationPolicyName:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: IamAutomationPolicyName
+      - ''
+Resources:
+  Rapid7StandardSelfReferentialPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-standard-self-referential-policy
+      Description: Standard policy for all Rapid7 IAM Roles that allows for the role
+        to self reflect on itself, the account, and organization it exists within.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - iam:SimulatePrincipalPolicy
+          - organizations:DescribeAccount
+          - organizations:DescribeOrganization
+          - organizations:ListAccounts
+          - organizations:ListAccountsForParent
+          - organizations:ListOrganizationalUnitsForParent
+          - organizations:ListPolicies
+          - organizations:ListRoots
+          - organizations:ListTagsForResource
+          - organizations:ListTargetsForPolicy
+          - sts:GetCallerIdentity
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+  Rapid7ReadonlyPolicy0:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-readonly-policy-0
+      Description: One of several readonly policies for the Rapid7 IAM Role. The Policies
+        are programmatically generated by taking a sorted list of all required readonly
+        IAM actions and split by the maximum policy character limit. Each Policy is
+        ordered by a numeric suffix starting at 0.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - access-analyzer:ListAnalyzers
+          - access-analyzer:ListFindings
+          - account:GetAlternateContact
+          - acm-pca:GetPolicy
+          - acm-pca:ListCertificateAuthorities
+          - acm:DescribeCertificate
+          - acm:ListCertificates
+          - acm:ListTagsForCertificate
+          - airflow:GetEnvironment
+          - airflow:ListEnvironments
+          - aoss:BatchGetCollection
+          - aoss:GetSecurityPolicy
+          - aoss:ListCollections
+          - aoss:ListSecurityPolicies
+          - apigateway:GET
+          - apprunner:DescribeService
+          - apprunner:ListServices
+          - appstream:DescribeFleets
+          - appsync:GetApiCache
+          - appsync:ListDataSources
+          - appsync:ListGraphqlApis
+          - athena:GetWorkGroup
+          - athena:ListQueryExecutions
+          - athena:ListWorkGroups
+          - autoscaling:DescribeAutoScalingGroups
+          - autoscaling:DescribeLaunchConfigurations
+          - autoscaling:DescribeTags
+          - autoscaling:DescribeWarmPool
+          - backup-gateway:GetGateway
+          - backup-gateway:ListGateways
+          - backup:GetBackupVaultAccessPolicy
+          - backup:ListBackupVaults
+          - batch:DescribeComputeEnvironments
+          - bedrock:GetModelCustomizationJob
+          - bedrock:GetModelInvocationLoggingConfiguration
+          - bedrock:ListModelCustomizationJobs
+          - cassandra:Select
+          - cleanrooms:GetCollaboration
+          - cleanrooms:ListCollaborations
+          - cleanrooms:ListMembers
+          - cloudformation:DescribeStackResource
+          - cloudformation:DescribeStackResources
+          - cloudformation:DescribeStacks
+          - cloudformation:GetTemplate
+          - cloudformation:ListStackResources
+          - cloudformation:ListStacks
+          - cloudfront:GetDistribution
+          - cloudfront:ListDistributions
+          - cloudfront:ListTagsForResource
+          - cloudhsm:DescribeClusters
+          - cloudsearch:DescribeAvailabilityOptions
+          - cloudsearch:DescribeDomainEndpointOptions
+          - cloudsearch:DescribeDomains
+          - cloudsearch:DescribeServiceAccessPolicies
+          - cloudsearch:ListDomainNames
+          - cloudtrail:DescribeTrails
+          - cloudtrail:GetEventSelectors
+          - cloudtrail:GetInsightSelectors
+          - cloudtrail:GetTrailStatus
+          - cloudwatch:DescribeAlarms
+          - cloudwatch:DescribeAlarmsForMetric
+          - cloudwatch:GetMetricData
+          - cloudwatch:GetMetricStatistics
+          - cloudwatch:ListMetrics
+          - codebuild:BatchGetProjects
+          - codebuild:ListProjects
+          - codecommit:BatchGetRepositories
+          - codecommit:ListBranches
+          - codecommit:ListRepositories
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:ListIdentityProviders
+          - cognito-idp:ListUserPools
+          - config:DescribeConfigurationRecorderStatus
+          - config:DescribeConfigurationRecorders
+          - config:DescribeDeliveryChannelStatus
+          - config:DescribeDeliveryChannels
+          - connect:DescribeInstanceStorageConfig
+          - connect:ListInstanceStorageConfigs
+          - connect:ListInstances
+          - controltower:GetEnabledControl
+          - controltower:GetLandingZone
+          - controltower:GetLandingZoneDriftStatus
+          - controltower:GetLandingZoneStatus
+          - controltower:ListEnabledControls
+          - controltower:ListLandingZones
+          - datasync:DescribeTask
+          - datasync:ListLocations
+          - datasync:ListTasks
+          - dax:DescribeClusters
+          - directconnect:DescribeConnections
+          - dms:DescribeEndpoints
+          - dms:DescribeReplicationInstances
+          - docdb-elastic:GetCluster
+          - docdb-elastic:ListClusters
+          - ds:DescribeDirectories
+          - dynamodb:DescribeContinuousBackups
+          - dynamodb:DescribeGlobalTable
+          - dynamodb:DescribeTable
+          - dynamodb:ListBackups
+          - dynamodb:ListGlobalTables
+          - dynamodb:ListTables
+          - dynamodb:ListTagsOfResource
+          - ec2:DescribeAccountAttributes
+          - ec2:DescribeAddresses
+          - ec2:DescribeAvailabilityZones
+          - ec2:DescribeFlowLogs
+          - ec2:DescribeHosts
+          - ec2:DescribeImageAttribute
+          - ec2:DescribeImages
+          - ec2:DescribeImportImageTasks
+          - ec2:DescribeInstanceAttribute
+          - ec2:DescribeInstanceStatus
+          - ec2:DescribeInstances
+          - ec2:DescribeInternetGateways
+          - ec2:DescribeKeyPairs
+          - ec2:DescribeLaunchTemplateVersions
+          - ec2:DescribeManagedPrefixLists
+          - ec2:DescribeNatGateways
+          - ec2:DescribeNetworkAcls
+          - ec2:DescribeNetworkInterfaceAttribute
+          - ec2:DescribeNetworkInterfaces
+          - ec2:DescribePlacementGroups
+          - ec2:DescribeRegions
+          - ec2:DescribeReservedInstances
+          - ec2:DescribeRouteTables
+          - ec2:DescribeSecurityGroupRules
+          - ec2:DescribeSecurityGroups
+          - ec2:DescribeSnapshotAttribute
+          - ec2:DescribeSnapshots
+          - ec2:DescribeSubnets
+          - ec2:DescribeTags
+          - ec2:DescribeTrafficMirrorTargets
+          - ec2:DescribeTransitGatewayAttachments
+          - ec2:DescribeTransitGatewayRouteTables
+          - ec2:DescribeTransitGatewayVpcAttachments
+          - ec2:DescribeTransitGateways
+          - ec2:DescribeVolumeStatus
+          - ec2:DescribeVolumes
+          - ec2:DescribeVpcAttribute
+          - ec2:DescribeVpcEndpointConnections
+          - ec2:DescribeVpcEndpointServiceConfigurations
+          - ec2:DescribeVpcEndpointServicePermissions
+          - ec2:DescribeVpcEndpoints
+          - ec2:DescribeVpcPeeringConnections
+          - ec2:DescribeVpcs
+          - ec2:DescribeVpnConnections
+          - ec2:DescribeVpnGateways
+          - ec2:GetConsoleOutput
+          - ec2:GetEbsDefaultKmsKeyId
+          - ec2:GetEbsEncryptionByDefault
+          - ec2:GetManagedPrefixListEntries
+          - ec2:GetSerialConsoleAccessStatus
+          - ec2:SearchTransitGatewayRoutes
+          - ecr-public:DescribeImages
+          - ecr-public:DescribeRepositories
+          - ecr:DescribeImageReplicationStatus
+          - ecr:DescribeImageScanFindings
+          - ecr:DescribeImages
+          - ecr:DescribePullThroughCacheRules
+          - ecr:DescribeRegistry
+          - ecr:DescribeRepositories
+          - ecr:GetAuthorizationToken
+          - ecr:GetDownloadUrlForLayer
+          - ecr:GetLifecyclePolicy
+          - ecr:GetLifecyclePolicyPreview
+          - ecr:GetRegistryPolicy
+          - ecr:GetRegistryScanningConfiguration
+          - ecr:GetRepositoryPolicy
+          - ecr:ListImages
+          - ecr:ListTagsForResource
+          - ecs:DescribeCapacityProviders
+          - ecs:DescribeClusters
+          - ecs:DescribeContainerInstances
+          - ecs:DescribeServices
+          - ecs:DescribeTaskDefinition
+          - ecs:DescribeTasks
+          - ecs:ListClusters
+          - ecs:ListContainerInstances
+          - ecs:ListServices
+          - ecs:ListTaskDefinitions
+          - ecs:ListTasks
+          - eks:AccessKubernetesApi
+          - eks:DescribeCluster
+          - eks:DescribeNodeGroup
+          - eks:ListClusters
+          - eks:ListNodeGroups
+          - elasticache:DescribeCacheClusters
+          - elasticache:DescribeCacheSubnetGroups
+          - elasticache:DescribeReplicationGroups
+          - elasticache:DescribeReservedCacheNodes
+          - elasticache:DescribeSnapshots
+          - elasticache:ListTagsForResource
+          - elasticbeanstalk:DescribeApplications
+          - elasticbeanstalk:DescribeConfigurationSettings
+          - elasticbeanstalk:DescribeEnvironmentResources
+          - elasticbeanstalk:DescribeEnvironments
+          - elasticbeanstalk:DescribePlatformVersion
+          - elasticfilesystem:DescribeBackupPolicy
+          - elasticfilesystem:DescribeFileSystemPolicy
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+  Rapid7ReadonlyPolicy1:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-readonly-policy-1
+      Description: One of several readonly policies for the Rapid7 IAM Role. The Policies
+        are programmatically generated by taking a sorted list of all required readonly
+        IAM actions and split by the maximum policy character limit. Each Policy is
+        ordered by a numeric suffix starting at 0.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - elasticfilesystem:DescribeFileSystems
+          - elasticfilesystem:DescribeLifecycleConfiguration
+          - elasticfilesystem:DescribeMountTargetSecurityGroups
+          - elasticfilesystem:DescribeMountTargets
+          - elasticfilesystem:DescribeTags
+          - elasticloadbalancing:DescribeInstanceHealth
+          - elasticloadbalancing:DescribeListeners
+          - elasticloadbalancing:DescribeLoadBalancerAttributes
+          - elasticloadbalancing:DescribeLoadBalancerPolicies
+          - elasticloadbalancing:DescribeLoadBalancerPolicyTypes
+          - elasticloadbalancing:DescribeLoadBalancers
+          - elasticloadbalancing:DescribeRules
+          - elasticloadbalancing:DescribeSslPolicies
+          - elasticloadbalancing:DescribeTags
+          - elasticloadbalancing:DescribeTargetGroups
+          - elasticloadbalancing:DescribeTargetHealth
+          - elasticmapreduce:DescribeCluster
+          - elasticmapreduce:DescribeSecurityConfiguration
+          - elasticmapreduce:GetBlockPublicAccessConfiguration
+          - elasticmapreduce:ListBootstrapActions
+          - elasticmapreduce:ListClusters
+          - elasticmapreduce:ListInstances
+          - elasticmapreduce:ListSecurityConfigurations
+          - elastictranscoder:ListPipelines
+          - es:DescribeElasticsearchDomains
+          - es:DescribeReservedElasticsearchInstances
+          - es:ListDomainNames
+          - es:ListTags
+          - events:DescribeEventBus
+          - events:ListEventBuses
+          - events:ListRules
+          - events:ListTargetsByRule
+          - firehose:DescribeDeliveryStream
+          - firehose:ListDeliveryStreams
+          - firehose:ListTagsForDeliveryStream
+          - fsx:DescribeFileSystems
+          - glacier:DescribeVault
+          - glacier:GetVaultAccessPolicy
+          - glacier:GetVaultLock
+          - glacier:ListTagsForVault
+          - glacier:ListVaults
+          - globalaccelerator:DescribeAcceleratorAttributes
+          - globalaccelerator:ListAccelerators
+          - globalaccelerator:ListListeners
+          - globalaccelerator:ListTagsForResource
+          - glue:GetConnection
+          - glue:GetConnections
+          - glue:GetCrawler
+          - glue:GetCrawlers
+          - glue:GetDataCatalogEncryptionSettings
+          - glue:GetDatabases
+          - glue:GetJob
+          - glue:GetJobs
+          - glue:GetResourcePolicy
+          - glue:GetSecurityConfiguration
+          - glue:GetSecurityConfigurations
+          - glue:GetTables
+          - glue:ListCrawlers
+          - glue:ListJobs
+          - glue:ListRegistries
+          - guardduty:GetDetector
+          - guardduty:GetFindings
+          - guardduty:GetMasterAccount
+          - guardduty:ListDetectors
+          - guardduty:ListFindings
+          - guardduty:ListMembers
+          - health:DescribeEvents
+          - iam:GenerateCredentialReport
+          - iam:GetAccessKeyLastUsed
+          - iam:GetAccountAuthorizationDetails
+          - iam:GetAccountPasswordPolicy
+          - iam:GetAccountSummary
+          - iam:GetCredentialReport
+          - iam:GetGroup
+          - iam:GetGroupPolicy
+          - iam:GetLoginProfile
+          - iam:GetOpenIDConnectProvider
+          - iam:GetPolicyVersion
+          - iam:GetRole
+          - iam:GetRolePolicy
+          - iam:GetSAMLProvider
+          - iam:GetServerCertificate
+          - iam:GetUser
+          - iam:GetUserPolicy
+          - iam:ListAccessKeys
+          - iam:ListAccountAliases
+          - iam:ListAttachedGroupPolicies
+          - iam:ListAttachedRolePolicies
+          - iam:ListAttachedUserPolicies
+          - iam:ListEntitiesForPolicy
+          - iam:ListGroupPolicies
+          - iam:ListGroups
+          - iam:ListGroupsForUser
+          - iam:ListInstanceProfiles
+          - iam:ListMFADevices
+          - iam:ListOpenIDConnectProviders
+          - iam:ListPolicies
+          - iam:ListPolicyVersions
+          - iam:ListRolePolicies
+          - iam:ListRoleTags
+          - iam:ListRoles
+          - iam:ListSAMLProviders
+          - iam:ListServerCertificates
+          - iam:ListSigningCertificates
+          - iam:ListUserPolicies
+          - iam:ListUserTags
+          - iam:ListUsers
+          - iam:SimulatePrincipalPolicy
+          - inspector2:ListCoverage
+          - inspector2:ListFindings
+          - kafka:ListClusters
+          - kafka:ListClustersV2
+          - kendra:DescribeIndex
+          - kendra:ListIndices
+          - kinesis:DescribeStream
+          - kinesis:ListShards
+          - kinesis:ListStreams
+          - kinesis:ListTagsForStream
+          - kinesisanalytics:DescribeApplication
+          - kinesisanalytics:ListApplications
+          - kinesisvideo:DescribeStream
+          - kinesisvideo:ListStreams
+          - kinesisvideo:ListTagsForStream
+          - kms:DescribeKey
+          - kms:GetKeyPolicy
+          - kms:GetKeyRotationStatus
+          - kms:ListAliases
+          - kms:ListKeys
+          - lambda:GetAccountSettings
+          - lambda:GetFunction
+          - lambda:GetFunctionUrlConfig
+          - lambda:GetLayerVersionPolicy
+          - lambda:GetPolicy
+          - lambda:ListFunctions
+          - lambda:ListLayers
+          - lambda:ListTags
+          - lightsail:GetContainerServices
+          - lightsail:GetDisks
+          - lightsail:GetInstances
+          - lightsail:GetLoadBalancers
+          - lightsail:GetRelationalDatabases
+          - logs:DescribeDestinations
+          - logs:DescribeLogGroups
+          - logs:DescribeMetricFilters
+          - lookoutequipment:DescribeDataset
+          - lookoutequipment:ListDatasets
+          - macie2:GetFindings
+          - macie2:GetMacieSession
+          - macie2:ListFindings
+          - memorydb:DescribeClusters
+          - memorydb:DescribeSubnetGroups
+          - memorydb:ListTags
+          - mq:DescribeBroker
+          - mq:ListBrokers
+          - network-firewall:DescribeFirewall
+          - network-firewall:ListFirewalls
+          - oam:GetSinkPolicy
+          - oam:ListLinks
+          - oam:ListSinks
+          - organizations:DescribeAccount
+          - organizations:DescribeOrganization
+          - organizations:DescribePolicy
+          - organizations:ListAccounts
+          - organizations:ListAccountsForParent
+          - organizations:ListOrganizationalUnitsForParent
+          - organizations:ListPolicies
+          - organizations:ListRoots
+          - organizations:ListTagsForResource
+          - organizations:ListTargetsForPolicy
+          - outposts:ListOutposts
+          - pricing:GetProducts
+          - quicksight:DescribeAccountSettings
+          - quicksight:DescribeAccountSubscription
+          - quicksight:DescribeIpRestriction
+          - quicksight:ListUsers
+          - ram:GetResourcePolicies
+          - ram:GetResourceShares
+          - ram:ListPrincipals
+          - ram:ListResources
+          - rbin:GetRule
+          - rbin:ListRules
+          - rds:DescribeDBClusterParameterGroups
+          - rds:DescribeDBClusterParameters
+          - rds:DescribeDBClusterSnapshotAttributes
+          - rds:DescribeDBClusterSnapshots
+          - rds:DescribeDBClusters
+          - rds:DescribeDBEngineVersions
+          - rds:DescribeDBInstances
+          - rds:DescribeDBParameterGroups
+          - rds:DescribeDBParameters
+          - rds:DescribeDBProxies
+          - rds:DescribeDBSnapshotAttributes
+          - rds:DescribeDBSnapshots
+          - rds:DescribeEventSubscriptions
+          - rds:DescribeGlobalClusters
+          - rds:DescribeOptionGroups
+          - rds:DescribePendingMaintenanceActions
+          - rds:DescribeReservedDBInstances
+          - rds:ListTagsForResource
+          - redshift-serverless:ListNamespaces
+          - redshift-serverless:ListWorkgroups
+          - redshift:DescribeClusterParameterGroups
+          - redshift:DescribeClusterParameters
+          - redshift:DescribeClusterSnapshots
+          - redshift:DescribeClusterSubnetGroups
+          - redshift:DescribeClusters
+          - redshift:DescribeLoggingStatus
+          - redshift:DescribeTags
+          - route53:GetDNSSEC
+          - route53:GetHostedZone
+          - route53:ListGeoLocations
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+  Rapid7ReadonlyPolicy2:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-readonly-policy-2
+      Description: One of several readonly policies for the Rapid7 IAM Role. The Policies
+        are programmatically generated by taking a sorted list of all required readonly
+        IAM actions and split by the maximum policy character limit. Each Policy is
+        ordered by a numeric suffix starting at 0.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - route53:ListHealthChecks
+          - route53:ListHostedZones
+          - route53:ListHostedZonesByName
+          - route53:ListHostedZonesByVpc
+          - route53:ListQueryLoggingConfigs
+          - route53:ListResourceRecordSets
+          - route53:ListTagsForResource
+          - route53:ListTagsForResources
+          - route53:ListVPCAssociationAuthorizations
+          - route53domains:GetDomainDetail
+          - route53domains:ListDomains
+          - route53resolver:ListResolverQueryLogConfigAssociations
+          - route53resolver:ListResolverQueryLogConfigs
+          - s3:GetAccessPointPolicy
+          - s3:GetAccessPointPolicyStatus
+          - s3:GetAccountPublicAccessBlock
+          - s3:GetBucketAcl
+          - s3:GetBucketCORS
+          - s3:GetBucketLocation
+          - s3:GetBucketLogging
+          - s3:GetBucketNotification
+          - s3:GetBucketObjectLockConfiguration
+          - s3:GetBucketOwnershipControls
+          - s3:GetBucketPolicy
+          - s3:GetBucketPolicyStatus
+          - s3:GetBucketPublicAccessBlock
+          - s3:GetBucketTagging
+          - s3:GetBucketVersioning
+          - s3:GetBucketWebsite
+          - s3:GetEncryptionConfiguration
+          - s3:GetIntelligentTieringConfiguration
+          - s3:GetLifecycleConfiguration
+          - s3:GetMultiRegionAccessPointPolicy
+          - s3:GetMultiRegionAccessPointPolicyStatus
+          - s3:GetReplicationConfiguration
+          - s3:ListAccessPoints
+          - s3:ListAllMyBuckets
+          - s3:ListMultiRegionAccessPoints
+          - sagemaker:DescribeNotebookInstance
+          - sagemaker:DescribeTrainingJob
+          - sagemaker:ListNotebookInstances
+          - sagemaker:ListTags
+          - sagemaker:ListTrainingJobs
+          - savingsplans:DescribeSavingsPlans
+          - secretsmanager:DescribeSecret
+          - secretsmanager:GetResourcePolicy
+          - secretsmanager:ListSecrets
+          - serverlessrepo:GetApplication
+          - serverlessrepo:GetApplicationPolicy
+          - serverlessrepo:ListApplications
+          - ses:DescribeConfigurationSet
+          - ses:DescribeReceiptRuleSet
+          - ses:GetIdentityDkimAttributes
+          - ses:GetIdentityMailFromDomainAttributes
+          - ses:GetIdentityNotificationAttributes
+          - ses:GetIdentityVerificationAttributes
+          - ses:ListConfigurationSets
+          - ses:ListIdentities
+          - ses:ListIdentityPolicies
+          - ses:ListReceiptRuleSets
+          - shield:DescribeAttack
+          - shield:DescribeEmergencyContactSettings
+          - shield:GetSubscriptionState
+          - shield:ListAttacks
+          - shield:ListProtections
+          - sns:GetSubscriptionAttributes
+          - sns:GetTopicAttributes
+          - sns:ListSubscriptions
+          - sns:ListTopics
+          - sqs:GetQueueAttributes
+          - sqs:ListQueueTags
+          - sqs:ListQueues
+          - ssm:DescribeAssociation
+          - ssm:DescribeDocument
+          - ssm:DescribeDocumentPermission
+          - ssm:DescribeInstanceInformation
+          - ssm:DescribeParameters
+          - ssm:GetDocument
+          - ssm:GetServiceSetting
+          - ssm:ListAssociations
+          - ssm:ListDocumentVersions
+          - ssm:ListDocuments
+          - states:DescribeStateMachine
+          - states:ListStateMachines
+          - storagegateway:DescribeGatewayInformation
+          - storagegateway:DescribeNFSFileShares
+          - storagegateway:DescribeSMBFileShares
+          - storagegateway:DescribeSMBSettings
+          - storagegateway:ListFileShares
+          - storagegateway:ListGateways
+          - sts:GetCallerIdentity
+          - support:DescribeTrustedAdvisorCheckResult
+          - support:DescribeTrustedAdvisorChecks
+          - support:RefreshTrustedAdvisorCheck
+          - tag:GetResources
+          - timestream:DescribeEndpoints
+          - timestream:ListDatabases
+          - timestream:ListTables
+          - transcribe:GetMedicalTranscriptionJob
+          - transcribe:GetTranscriptionJob
+          - transcribe:ListMedicalTranscriptionJobs
+          - transcribe:ListTranscriptionJobs
+          - transfer:DescribeServer
+          - transfer:DescribeUser
+          - transfer:ListServers
+          - transfer:ListUsers
+          - waf-regional:GetRule
+          - waf-regional:GetWebACL
+          - waf-regional:ListResourcesForWebACL
+          - waf-regional:ListRules
+          - waf-regional:ListWebACLs
+          - waf:GetChangeToken
+          - waf:GetRule
+          - waf:GetWebACL
+          - waf:ListLoggingConfigurations
+          - waf:ListRules
+          - waf:ListWebACLs
+          - wafv2:GetWebACL
+          - wafv2:ListLoggingConfigurations
+          - wafv2:ListResourcesForWebACL
+          - wafv2:ListWebACLs
+          - workspaces:DescribeTags
+          - workspaces:DescribeWorkspaceBundles
+          - workspaces:DescribeWorkspaceDirectories
+          - workspaces:DescribeWorkspaces
+          - workspaces:DescribeWorkspacesConnectionStatus
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+  Rapid7EgressEventbridgeAutoProvisioningPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-egress-eventbridge-auto-provisioning-policy
+      Description: Grants the Rapid7 IAM Role permission to create/manage EventBridge
+        Rules/Targets and create/manage an SQS queue from consuming the Events.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AutoProvisionEventBridgeSqsReadOnly
+          Effect: Allow
+          Action:
+          - sqs:ListQueues
+          - events:DescribeEventBus
+          Resource:
+          - '*'
+        - Sid: AutoProvisionEventBridgeRules
+          Effect: Allow
+          Action:
+          - events:DescribeRule
+          - events:PutRule
+          - events:DeleteRule
+          - events:PutTargets
+          - events:RemoveTargets
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/divvycloud*
+          - Fn::Sub: arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/rapid7*
+        - Sid: AutoProvisionEventBridgeRulesPassEgressRoleToEventBridge
+          Effect: Allow
+          Action: iam:PassRole
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/rapid7/rapid7-consolidated
+          Condition:
+            StringEquals:
+              iam:PassedToService: events.amazonaws.com
+            StringLike:
+              iam:AssociatedResourceARN:
+              - Fn::Sub: arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/divvycloud*
+              - Fn::Sub: arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/rapid7*
+        - Sid: AutoProvisionSQSQueueForEventEgress
+          Effect: Allow
+          Action:
+          - sqs:CreateQueue
+          - sqs:GetQueueAttributes
+          - sqs:SetQueueAttributes
+          - sqs:DeleteQueue
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:divvycloud*
+          - Fn::Sub: arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:rapid7*
+        - Sid: AllowReceivingMessagesFromSqsAutoProvisionedQueues
+          Effect: Allow
+          Action:
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:divvycloud*
+          - Fn::Sub: arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:rapid7*
+      Roles:
+      - Ref: Rapid7Consolidated
+    Condition: CondEnableEventbridgeAutoProvisioning
+  Rapid7EgressLpaAutoProvisioningPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-egress-lpa-auto-provisioning-policy
+      Description: Grants the Rapid7 IAM Role permission to access CloudTrail, to
+        create the necessary AWS Glue tables and to create/execute Athena queries
+        with a s3 bucket for results.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AthenaPermissionsForLPA
+          Effect: Allow
+          Action:
+          - athena:StartQueryExecution
+          - athena:GetQueryExecution
+          - athena:GetQueryResults
+          - athena:GetWorkGroup
+          - athena:UpdateWorkGroup
+          - athena:CreateWorkGroup
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:workgroup/ics-iam-lpa
+        - Sid: AthenaPermissionsForGlue
+          Effect: Allow
+          Action:
+          - glue:GetDatabase
+          - glue:CreateTable
+          - glue:GetPartitions
+          - glue:CreateDatabase
+          - glue:DeleteTable
+          - glue:GetTable
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog
+          - Fn::Sub: arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/ics-iam-lpa
+          - Fn::Sub: arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/ics-iam-lpa/*
+        - Sid: AllowAthenaToWriteToWorkingBucket
+          Effect: Allow
+          Action:
+          - s3:CreateBucket
+          - s3:DeleteBucket
+          - s3:GetBucketLocation
+          - s3:GetObject
+          - s3:ListBucket
+          - s3:PutObject
+          - s3:ListBucketMultipartUploads
+          - s3:ListMultipartUploadParts
+          - s3:PutLifecycleConfiguration
+          - s3:AbortMultipartUpload
+          - s3:DeleteObject
+          - s3:DeleteObjectVersion
+          Resource:
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${LpaWorkingBucket}
+          - Fn::Sub: arn:${AWS::Partition}:s3:::${LpaWorkingBucket}/*
+      Roles:
+      - Ref: Rapid7Consolidated
+    Condition: CondEnableLpaAutoProvisioning
+  Rapid7EgressHostVulnerabilityManagementViaRolePolicyV2:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-egress-host-vulnerability-management-via-role-policy-v2
+      Description: Grants the Rapid7 IAM Role permissions to create and download EBS
+        snapshots for vulnerability scanning. ec2:CreateSnapshot, ec2:CopySnapshot
+        - required to take a snapshot of the EBS volume that can be analyzed by InsightCloudSec.
+        ec2:CreateTags - required to create tags in the source account. ec2:DeleteSnapshot
+        - required to clean up the snapshot in the source account after the analysis
+        has been completed. ec2:ModifySnapshotAttribute - required to grant permission
+        to the InsightCloudSec backend to download the snapshot. kms:ReEncryptFrom,
+        kms:ReEncryptTo - required when snapshots have been encryped to grant permission
+        to the InsightCloudSec to share the snapshot.kms:CreateGrant, kms:DescribeKey,
+        kms:RetireGrant - required to create a grant to the KMS key that can be used
+        to decrypt the EBS volume. kms:Encrypt, kms:Decrypt, kms:GenerateDataKeyWithoutPlaintext
+        - required to utilize CMK in Rapid7's account for AWS Default Key encrypted
+        EBS volume assessments.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AwsCloudVmPermissions
+          Effect: Allow
+          Action:
+          - ec2:CreateSnapshot
+          - ec2:CopySnapshot
+          - ec2:CreateTags
+          - ec2:ModifySnapshotAttribute
+          - kms:CreateGrant
+          - kms:DescribeKey
+          - kms:ReEncryptFrom
+          - kms:ReEncryptTo
+          Resource: '*'
+        - Sid: ICSDeleteSnapshot
+          Action:
+          - ec2:DeleteSnapshot
+          Effect: Allow
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:ec2:*:*:snapshot/*
+          Condition:
+            StringEquals:
+              aws:ResourceTag/creator: insightcloudsec
+        - Sid: R7CMKAccess
+          Effect: Allow
+          Action:
+          - kms:RetireGrant
+          - kms:GenerateDataKeyWithoutPlaintext
+          - kms:Encrypt
+          - kms:Decrypt
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:kms:*:*:key/*
+          Condition:
+            StringEquals:
+              aws:ResourceTag/creator: insightcloudsec
+      Roles:
+      - Ref: Rapid7Consolidated
+    Condition: CondEnableHostVulnerabilityManagement
+  Rapid7EgressContainerVulnerabilityManagementViaRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-egress-container-vulnerability-management-via-role-policy
+      Description: Grants the Rapid7 IAM Role ECR read permission to all ECR repositories
+        in the AWS Account. This allows for pulling images and scanning for vulnerabilities.
+        Some read permissions overlap with the Rapid7 readonly Policies which are
+        used for general visibility and discovery. This Policy duplicates those permissions
+        because the Rapid7 IAM Role may need to access additional metadata before
+        or after pulling an image to capture the most recent context when producing
+        a finding.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AllowEcrReadOnlyAccessForVulnerabilityScanning
+          Effect: Allow
+          Action:
+          - ecr:Get*
+          - ecr:List*
+          - ecr:Describe*
+          - ecr:Batch*
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+    Condition: CondEnableContainerVulnerabilityManagement
+  Rapid7AutomationFullAccess:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: rapid7-automation-full-access
+      Description: IAM Policy that provides full, wildcard permissions, e.g., health:*,
+        for each service InsightCloudSec supports. It allows for use of all automation
+        and remediation features without tailored IAM Policy design. It is useful
+        for proof of concept deployments and testing of features.
+      Path: /rapid7/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: Rapid7FullAutomationWildcardPermissions
+          Action:
+          - access-analyzer:*
+          - account:*
+          - acm:*
+          - acm-pca:*
+          - airflow:*
+          - aoss:*
+          - apigateway:*
+          - apprunner:*
+          - appstream:*
+          - appsync:*
+          - athena:*
+          - autoscaling:*
+          - backup:*
+          - backup-gateway:*
+          - batch:*
+          - cassandra:*
+          - cloudformation:*
+          - cloudfront:*
+          - cloudhsm:*
+          - cloudsearch:*
+          - cloudtrail:*
+          - cloudwatch:*
+          - codebuild:*
+          - codecommit:*
+          - cognito-idp:*
+          - config:*
+          - datasync:*
+          - dax:*
+          - directconnect:*
+          - dms:*
+          - docdb-elastic:*
+          - ds:*
+          - dynamodb:*
+          - ec2:*
+          - ecr:*
+          - ecr-public:*
+          - ecs:*
+          - eks:*
+          - elasticache:*
+          - elasticbeanstalk:*
+          - elasticfilesystem:*
+          - elasticloadbalancing:*
+          - elasticmapreduce:*
+          - elastictranscoder:*
+          - es:*
+          - events:*
+          - firehose:*
+          - fsx:*
+          - glacier:*
+          - globalaccelerator:*
+          - glue:*
+          - guardduty:*
+          - health:*
+          - kafka:*
+          - kendra:*
+          - kinesis:*
+          - kinesisvideo:*
+          - kms:*
+          - lambda:*
+          - lightsail:*
+          - logs:*
+          - lookoutequipment:*
+          - macie2:*
+          - memorydb:*
+          - mq:*
+          - oam:*
+          - organizations:*
+          - outposts:*
+          - quicksight:*
+          - rbin:*
+          - rds:*
+          - redshift:*
+          - redshift-serverless:*
+          - route53:*
+          - route53domains:*
+          - route53resolver:*
+          - s3:*
+          - sagemaker:*
+          - secretsmanager:*
+          - serverlessrepo:*
+          - ses:*
+          - shield:*
+          - sns:*
+          - sqs:*
+          - ssm:*
+          - states:*
+          - storagegateway:*
+          - support:*
+          - tag:*
+          - timestream:*
+          - transcribe:*
+          - transfer:*
+          - waf:*
+          - waf-regional:*
+          - wafv2:*
+          - workspaces:*
+          Effect: Allow
+          Resource: '*'
+        - Sid: Rapid7FullAutomationIndividualPermissions
+          Action:
+          - iam:AddClientIDToOpenIDConnectProvider
+          - iam:AddRoleToInstanceProfile
+          - iam:AddUserToGroup
+          - iam:AttachGroupPolicy
+          - iam:AttachRolePolicy
+          - iam:AttachUserPolicy
+          - iam:ChangePassword
+          - iam:CreateAccessKey
+          - iam:CreateAccountAlias
+          - iam:CreateGroup
+          - iam:CreateInstanceProfile
+          - iam:CreateLoginProfile
+          - iam:CreateOpenIDConnectProvider
+          - iam:CreatePolicy
+          - iam:CreatePolicyVersion
+          - iam:CreateRole
+          - iam:CreateSAMLProvider
+          - iam:CreateServiceLinkedRole
+          - iam:CreateServiceSpecificCredential
+          - iam:CreateUser
+          - iam:CreateVirtualMFADevice
+          - iam:DeactivateMFADevice
+          - iam:DeleteAccessKey
+          - iam:DeleteAccountAlias
+          - iam:DeleteAccountPasswordPolicy
+          - iam:DeleteGroup
+          - iam:DeleteGroupPolicy
+          - iam:DeleteInstanceProfile
+          - iam:DeleteLoginProfile
+          - iam:DeleteOpenIDConnectProvider
+          - iam:DeletePolicy
+          - iam:DeletePolicyVersion
+          - iam:DeleteRole
+          - iam:DeleteRolePermissionsBoundary
+          - iam:DeleteRolePolicy
+          - iam:DeleteSAMLProvider
+          - iam:DeleteServerCertificate
+          - iam:DeleteServiceLinkedRole
+          - iam:DeleteServiceSpecificCredential
+          - iam:DeleteSigningCertificate
+          - iam:DeleteSSHPublicKey
+          - iam:DeleteUser
+          - iam:DeleteUserPermissionsBoundary
+          - iam:DeleteUserPolicy
+          - iam:DeleteVirtualMFADevice
+          - iam:DetachGroupPolicy
+          - iam:DetachRolePolicy
+          - iam:DetachUserPolicy
+          - iam:EnableMFADevice
+          - iam:GenerateCredentialReport
+          - iam:GenerateOrganizationsAccessReport
+          - iam:GenerateServiceLastAccessedDetails
+          - iam:GetAccessKeyLastUsed
+          - iam:GetAccountAuthorizationDetails
+          - iam:GetAccountPasswordPolicy
+          - iam:GetAccountSummary
+          - iam:GetContextKeysForCustomPolicy
+          - iam:GetContextKeysForPrincipalPolicy
+          - iam:GetCredentialReport
+          - iam:GetGroup
+          - iam:GetGroupPolicy
+          - iam:GetInstanceProfile
+          - iam:GetLoginProfile
+          - iam:GetOpenIDConnectProvider
+          - iam:GetOrganizationsAccessReport
+          - iam:GetPolicy
+          - iam:GetPolicyVersion
+          - iam:GetRole
+          - iam:GetRolePolicy
+          - iam:GetSAMLProvider
+          - iam:GetServerCertificate
+          - iam:GetServiceLastAccessedDetails
+          - iam:GetServiceLastAccessedDetailsWithEntities
+          - iam:GetServiceLinkedRoleDeletionStatus
+          - iam:GetSSHPublicKey
+          - iam:GetUser
+          - iam:GetUserPolicy
+          - iam:ListAccessKeys
+          - iam:ListAccountAliases
+          - iam:ListAttachedGroupPolicies
+          - iam:ListAttachedRolePolicies
+          - iam:ListAttachedUserPolicies
+          - iam:ListEntitiesForPolicy
+          - iam:ListGroupPolicies
+          - iam:ListGroups
+          - iam:ListGroupsForUser
+          - iam:ListInstanceProfiles
+          - iam:ListInstanceProfilesForRole
+          - iam:ListInstanceProfileTags
+          - iam:ListMFADevices
+          - iam:ListMFADeviceTags
+          - iam:ListOpenIDConnectProviders
+          - iam:ListOpenIDConnectProviderTags
+          - iam:ListPolicies
+          - iam:ListPoliciesGrantingServiceAccess
+          - iam:ListPolicyTags
+          - iam:ListPolicyVersions
+          - iam:ListRolePolicies
+          - iam:ListRoles
+          - iam:ListRoleTags
+          - iam:ListSAMLProviders
+          - iam:ListSAMLProviderTags
+          - iam:ListServerCertificates
+          - iam:ListServerCertificateTags
+          - iam:ListServiceSpecificCredentials
+          - iam:ListSigningCertificates
+          - iam:ListSSHPublicKeys
+          - iam:ListUserPolicies
+          - iam:ListUsers
+          - iam:ListUserTags
+          - iam:ListVirtualMFADevices
+          - iam:PassRole
+          - iam:PutGroupPolicy
+          - iam:PutRolePermissionsBoundary
+          - iam:PutRolePolicy
+          - iam:PutUserPermissionsBoundary
+          - iam:PutUserPolicy
+          - iam:RemoveClientIDFromOpenIDConnectProvider
+          - iam:RemoveRoleFromInstanceProfile
+          - iam:RemoveUserFromGroup
+          - iam:ResetServiceSpecificCredential
+          - iam:ResyncMFADevice
+          - iam:SetDefaultPolicyVersion
+          - iam:SetSecurityTokenServicePreferences
+          - iam:SimulateCustomPolicy
+          - iam:SimulatePrincipalPolicy
+          - iam:TagInstanceProfile
+          - iam:TagMFADevice
+          - iam:TagOpenIDConnectProvider
+          - iam:TagPolicy
+          - iam:TagRole
+          - iam:TagSAMLProvider
+          - iam:TagServerCertificate
+          - iam:TagUser
+          - iam:UntagInstanceProfile
+          - iam:UntagMFADevice
+          - iam:UntagOpenIDConnectProvider
+          - iam:UntagPolicy
+          - iam:UntagRole
+          - iam:UntagSAMLProvider
+          - iam:UntagServerCertificate
+          - iam:UntagUser
+          - iam:UpdateAccessKey
+          - iam:UpdateAccountPasswordPolicy
+          - iam:UpdateAssumeRolePolicy
+          - iam:UpdateGroup
+          - iam:UpdateLoginProfile
+          - iam:UpdateOpenIDConnectProviderThumbprint
+          - iam:UpdateRole
+          - iam:UpdateRoleDescription
+          - iam:UpdateSAMLProvider
+          - iam:UpdateServerCertificate
+          - iam:UpdateServiceSpecificCredential
+          - iam:UpdateSigningCertificate
+          - iam:UpdateSSHPublicKey
+          - iam:UpdateUser
+          - iam:UploadServerCertificate
+          - iam:UploadSigningCertificate
+          - iam:UploadSSHPublicKey
+          - inspector2:ListCoverage
+          - inspector2:ListFindings
+          - pricing:GetProducts
+          - savingsplans:DescribeSavingsPlans
+          - sts:GetCallerIdentity
+          Effect: Allow
+          Resource: '*'
+      Roles:
+      - Ref: Rapid7Consolidated
+    Condition: CondEnableAutomationFullAccessPolicy
+  Rapid7Consolidated:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: rapid7-consolidated
+      Description: Rapid7 IAM Role used for all InsightCloudSec features.
+      Path: /rapid7/
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: TrustRapid7DeploymentAccount
+          Effect: Allow
+          Principal:
+            AWS:
+            - Ref: IamDeploymentRoleArn
+          Action: sts:AssumeRole
+          Condition:
+            StringEquals:
+              sts:ExternalId:
+                Ref: IamRoleExternalId
+        - Fn::If:
+          - CondAllowEventbridgeToAssumeEgressRole
+          - Sid: AllowEventBridgeToAssumeRole
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+          - Ref: AWS::NoValue
+      ManagedPolicyArns:
+        Fn::If:
+        - CondIamAutomationPolicyName
+        - - Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${IamAutomationPolicyName}
+        - Ref: AWS::NoValue
+Outputs:
+  Rapid7ConsolidatedArn:
+    Description: ARN for rapid7-consolidated role
+    Value:
+      Fn::GetAtt:
+      - Rapid7Consolidated
+      - Arn
